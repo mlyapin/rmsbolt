@@ -784,7 +784,14 @@ toolchain."
                          (alist-get 'file elt ""))))
                      cmds))
              (dir (alist-get 'directory entry))
-             (cmd (alist-get 'command entry)))
+             ;; According to the specification, compile commands can be specified either
+             ;; as a single string in the "command" field or as a list of strings in the "arguments" field.
+             (cmd (if-let ((cmd (alist-get 'command entry)))
+                      cmd
+                      (let ((args (alist-get 'arguments entry)))
+                        (string-join args " ")
+                        )))
+             )
     (list dir cmd)))
 (defun rmsbolt--handle-c-compile-cmd (src-buffer)
   "Handle compile_commands.json for c/c++ for a given SRC-BUFFER.
