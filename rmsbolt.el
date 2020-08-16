@@ -775,13 +775,15 @@ toolchain."
   (when-let ((json-object-type 'alist)
              (json-array-type 'vector)
              (cmds (json-read-file comp-cmds))
-             (stripped-file (file-name-nondirectory file))
              (entry (cl-find-if
                      (lambda (elt)
-                       (string=
-                        stripped-file
-                        (file-name-nondirectory
-                         (alist-get 'file elt ""))))
+                       (let ((ccj_file (expand-file-name
+                                        (alist-get 'file elt "")
+                                        (alist-get 'directory elt "")))
+                             (file (expand-file-name file)))
+                         (string=
+                          file
+                          ccj_file)))
                      cmds))
              (dir (alist-get 'directory entry))
              ;; According to the specification, compile commands can be specified either
