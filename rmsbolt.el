@@ -856,7 +856,7 @@ return t if successful."
                           :supports-disass nil
                           :objdumper 'cat
                           :compile-cmd-function #'rmsbolt--lisp-compile-cmd))
-   (rust-mode
+   ((rust-mode rustic-mode)
     . ,(make-rmsbolt-lang :compile-cmd "rustc"
                           :supports-asm t
                           :supports-disass nil
