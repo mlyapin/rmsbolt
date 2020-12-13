@@ -1403,7 +1403,12 @@ Argument OVERRIDE-BUFFER use this buffer instead of reading from the output file
 (defun rmsbolt--get-lang ()
   "Helper function to get lang def for LANGUAGE."
   (or rmsbolt-language-descriptor
-      (cdr-safe (assoc major-mode rmsbolt-languages))))
+      (cdr-safe
+       (cl-assoc-if (lambda (x)
+                      (if (listp x)
+                          (member major-mode x)
+                        (eq major-mode x)))
+                    rmsbolt-languages))))
 
 (defun rmsbolt--parse-options ()
   "Parse RMS options from file."
