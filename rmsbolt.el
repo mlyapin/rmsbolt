@@ -1,8 +1,8 @@
 ;;; rmsbolt.el --- A compiler output viewer -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2018 Jay Kamat
+;; Copyright (C) 2018-2021 Jay Kamat
 ;; Author: Jay Kamat <jaygkamat@gmail.com>
-;; Version: 0.1.1
+;; Version: 0.1.2
 ;; Keywords: compilation, tools
 ;; URL: http://gitlab.com/jgkamat/rmsbolt
 ;; Package-Requires: ((emacs "25.1"))
@@ -777,13 +777,11 @@ toolchain."
              (cmds (json-read-file comp-cmds))
              (entry (cl-find-if
                      (lambda (elt)
-                       (let ((ccj_file (expand-file-name
-                                        (alist-get 'file elt "")
-                                        (alist-get 'directory elt "")))
-                             (file (expand-file-name file)))
-                         (string=
-                          file
-                          ccj_file)))
+                       (file-equal-p
+                        file
+                        (expand-file-name
+                         (alist-get 'file elt "")
+                         (alist-get 'directory elt ""))))
                      cmds))
              (dir (alist-get 'directory entry))
              ;; According to the specification, compile commands can be specified either
@@ -810,7 +808,7 @@ return t if successful."
              (to-ret (rmsbolt--parse-compile-commands
                       compile-cmd-file (buffer-file-name src-buffer))))
     (with-current-buffer src-buffer
-      (setq-local rmsbolt-default-directory (cl-first to-ret))
+      (setq-local rmsbolt-default-directory (file-name-as-directory (cl-first to-ret)))
       (setq-local rmsbolt-command
                   ;; Remove -c, -S, and -o <arg> if present,
                   ;; as we will add them back
@@ -911,11 +909,11 @@ return t if successful."
                           :disass-hidden-funcs rmsbolt--hidden-func-zig))
    (go-mode
     . ,(make-rmsbolt-lang :compile-cmd "go"
-			  :supports-asm nil
-			  :supports-disass t
-			  :objdumper 'go-objdump
-			  :compile-cmd-function #'rmsbolt--go-compile-cmd
-			  :process-asm-custom-fn #'rmsbolt--process-go-asm-lines))
+			                    :supports-asm nil
+			                    :supports-disass t
+			                    :objdumper 'go-objdump
+			                    :compile-cmd-function #'rmsbolt--go-compile-cmd
+			                    :process-asm-custom-fn #'rmsbolt--process-go-asm-lines))
    (swift-mode
     . ,(make-rmsbolt-lang :compile-cmd (rmsbolt--path-to-swift-compiler)
                           :supports-asm t
@@ -1074,7 +1072,10 @@ Argument SRC-BUFFER source buffer."
               (buffer-file-name src-buffer)))
          (result nil)
          (func nil)
-         (source-linum nil))
+         (source-linum nil)
+         (def-dir (or (buffer-local-value 'rmsbolt-default-directory src-buffer)
+                      (and src-file-name
+                           (file-name-directory src-file-name)))))
     (dolist (line asm-lines)
       (catch 'continue
         (when (and (> (length result) rmsbolt-binary-asm-limit)
@@ -1083,8 +1084,10 @@ Argument SRC-BUFFER source buffer."
             '("Aborting processing due to exceeding the binary limit.")))
         (when (string-match rmsbolt-disass-line line)
           ;; Don't add linums from files which we aren't inspecting
-          ;; If we get a non-absolute .file path, treat it like we are in the src directory.
-          (let ((default-directory (file-name-directory src-file-name)))
+          ;; If we get a non-absolute .file path, check to see if we
+          ;; have a default dir. If not, treat it like we are in the
+          ;; src directory.
+          (let ((default-directory def-dir))
             (if (file-equal-p src-file-name
                               (match-string 1 line))
                 (setq source-linum (string-to-number (match-string 2 line)))
@@ -1118,7 +1121,10 @@ Argument SRC-BUFFER source buffer."
          (result nil)
          (prev-label nil)
          (source-linum nil)
-         (source-file-map (make-hash-table :test #'eq)))
+         (source-file-map (make-hash-table :test #'eq))
+         (def-dir (or (buffer-local-value 'rmsbolt-default-directory src-buffer)
+                      (and src-file-name
+                           (file-name-directory src-file-name)))))
     (dolist (line asm-lines)
       (let* ((raw-match (or (string-match rmsbolt-label-def line)
                             (string-match rmsbolt-assignment-def line)))
@@ -1140,8 +1146,10 @@ Argument SRC-BUFFER source buffer."
            ;; Process any line number hints
            ((string-match rmsbolt-source-tag line)
             (if (or (not src-file-name) ;; Skip file match if we don't have a current filename
-                    ;; If we get a non-absolute .file path, treat it like we are in the src directory.
-                    (let ((default-directory (file-name-directory src-file-name)))
+                    ;; If we get a non-absolute .file path, check to see if we
+                    ;; have a default dir. If not, treat it like we are in the
+                    ;; src directory.
+                    (let ((default-directory def-dir))
                       (file-equal-p src-file-name
                                     (gethash
                                      (string-to-number (match-string 1 line))
@@ -1316,12 +1324,6 @@ Argument OVERRIDE-BUFFER use this buffer instead of reading from the output file
         (default-directory (buffer-local-value 'default-directory buffer))
         (src-buffer (buffer-local-value 'rmsbolt-src-buffer buffer)))
 
-    ;; Clear out default-set variables
-    (with-current-buffer src-buffer
-      (dolist (var rmsbolt--default-variables)
-        (rmsbolt--set-local var nil))
-      (setq-local rmsbolt--default-variables nil))
-
     (with-current-buffer (get-buffer-create rmsbolt-output-buffer)
       ;; Store src buffer value for later linking
       (cond ((not compilation-fail)
@@ -1397,7 +1399,12 @@ Argument OVERRIDE-BUFFER use this buffer instead of reading from the output file
                (setq-local rmsbolt-line-mapping nil))
              (rmsbolt--cleanup-overlays)))
       ;; Reset automated recompile
-      (setq rmsbolt--automated-compile nil))))
+      (setq rmsbolt--automated-compile nil))
+    ;; Clear out default-set variables
+    (with-current-buffer src-buffer
+      (dolist (var rmsbolt--default-variables)
+        (rmsbolt--set-local var nil))
+      (setq-local rmsbolt--default-variables nil))))
 
 ;;;;; Parsing Options
 (defun rmsbolt--get-lang ()
@@ -1476,16 +1483,21 @@ Are you running two compilations at the same time?"))
     ;; We cannot compile asm-mode files
     (message "Cannot compile assembly files. Are you sure you are not in the output buffer?"))
    ((rmsbolt-l-elisp-compile-override (rmsbolt--get-lang))
-    (funcall
-     (rmsbolt-l-elisp-compile-override (rmsbolt--get-lang))
-     :src-buffer (current-buffer)))
+    (with-current-buffer (or (buffer-base-buffer) (current-buffer))
+      (funcall
+       (rmsbolt-l-elisp-compile-override (rmsbolt--get-lang))
+       :src-buffer (current-buffer))))
    (t
     (rmsbolt--parse-options)
     (let* ((src-buffer (current-buffer))
            (lang (rmsbolt--get-lang))
            (func (rmsbolt-l-compile-cmd-function lang))
            ;; Generate command
-           (cmd (funcall func :src-buffer src-buffer))
+           (cmd
+            ;; Compilation commands assume the current buffer is a real file
+            ;; currently - this works around that.
+            (with-current-buffer (or (buffer-base-buffer) (current-buffer))
+              (funcall func :src-buffer src-buffer)))
            (asm-format
             (buffer-local-value 'rmsbolt-asm-format src-buffer))
            (default-directory (or rmsbolt-default-directory

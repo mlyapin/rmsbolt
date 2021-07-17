@@ -18,7 +18,7 @@ please start at the docs (also available through info).]]
 - Much more flexible and powerful:
   - Supports disassembly to bytecode as well as assembly.
   - Supports many languages that godbolt does not support, such as PHP,
-    Common Lisp, Emacs Lisp, Java, and Pony.
+  - Common Lisp, Emacs Lisp, and Pony.
   - Allows targeting custom compilers - which means disassembly for niche
     assembly targets, specific commits of compilers, and patched libraries or
     compilers is possible.
@@ -119,8 +119,8 @@ The main knobs are described in the full documentation.
 * Community and Support
 
 If you need help, have questions, or just want to chat about compilers, feel
-free to drop by ~#rmsbolt~ on [[https://freenode.net/][Freenode]] ([[https://webchat.freenode.net/?channels=#rmsbolt][webchat]]). Please be sure to stick
-around, for a reply.
+free to drop by ~#rmsbolt~ on [[https://libera.chat/][Libera]]. Please be sure to stick around, for a
+reply.
 
 If you find issues, please send me a mail or submit an issue.
 
